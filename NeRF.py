@@ -107,7 +107,8 @@ if __name__ == '__main__':
     '''
         Unittest Neural Radiance Fields:
     '''
-
+    print('Unittesting Neural Radiance Field Network')
+    print('==========================================\n')
     #test creation of model
     print('Testing creation of NeRF')
     model = NeRF()
@@ -130,3 +131,6 @@ if __name__ == '__main__':
     print('\tOutput Shape:', out.shape)
     assert out.shape == (100,4)
     print('\tShape of output is correct\n\n')
+
+    print('Unittesting Neural Radiance Field Network')
+    print('==========================================\n')
