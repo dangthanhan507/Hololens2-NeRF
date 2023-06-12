@@ -25,15 +25,15 @@ import torch.nn as nn
 from tqdm import tqdm
 
 '''
-    NOTE: this is a huge dataset.... might be wise to decrease resolution and fps of hololens data if we want to finish this project.
     NOTE: remember to get calibrations to plug in real focal length
-    NOTE: create graphs to visualize this stuff
 
 '''
 
 if __name__ == '__main__':
-    BATCH_SIZE = 3_000
-    EPOCHS = 1
+    google_colab = False
+
+    BATCH_SIZE = 4_000
+    EPOCHS = 10
     
     print('Setting up network')
     embedding_xyz = Embedding(3,10).cuda()
@@ -44,7 +44,19 @@ if __name__ == '__main__':
     print('Done setting up Network\n')
     
     print('Loading Dataset')
-    dataset = HololensSimpleDataset('../Hololens2-Capture/datanerf/',3, img_wh=(424,240))
+    if google_colab:
+      root = '/content/drive/MyDrive/nerf_desktop/Hololens2-NeRF/'
+    else:
+      root = './'
+
+    items = os.listdir(os.path.join(root,'models/'))
+    
+    path = os.path.join(root,'datanerf/')
+    error_path = os.path.join(root,'model_error',f'error{len(items)}.txt')
+    
+    file_error = open(error_path,'w')
+    
+    dataset = HololensSimpleDataset(path,3, img_wh=(424,240))
     
     dataloader = DataLoader(dataset,shuffle=True,num_workers=4,batch_size=BATCH_SIZE, pin_memory=True)
     print('Done Loading Dataset\n')
@@ -61,6 +73,7 @@ if __name__ == '__main__':
     print('Start Training:\n')
     for epoch in range(EPOCHS):
         print('EPOCH: ', epoch)
+        epoch_error = 0
         for idx,batch in enumerate( tqdm(dataloader) ):
             adam.zero_grad()
             
@@ -78,11 +91,18 @@ if __name__ == '__main__':
                 results[k] = torch.cat([v],0)
                 
             mse = loss(results['rgb_coarse'],rgbs) + loss(results['rgb_fine'],rgbs) #calc loss
-            
+            epoch_error += mse
+            #mse is a number
+            #take this and use for printing
             typ = 'fine' if 'rgb_fine' in results else 'coarse'
             
             mse.backward()
             adam.step()
-    os.makedirs('./models/',exist_ok=True)
+        print(f'Training error: {epoch_error}')
+        file_error.write(f'{epoch_error}\n')
+        
+    file_error.close()
+    os.makedirs(os.path.join(root,'models/'),exist_ok=True)
     chkpt = {'NeRF Coarse Params': nerf_coarse.state_dict(), 'NeRF Fine Params': nerf_fine.state_dict()}
-    torch.save(chkpt, os.path.join('./models','finished.pt'))
+    
+    torch.save(chkpt, os.path.join(root,'models/',f'finished{len(items)}.pt'))

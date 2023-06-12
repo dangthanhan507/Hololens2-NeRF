@@ -46,12 +46,11 @@ class HololensSimpleDataset(Dataset):
         
         self.directions = get_ray_directions(H,W,self.focal)
         
+        with open(os.path.join(self.root_dir,'pv_pose.json')) as f:
+            j_pv = json.load(f)
         if self.split == 'train':
             self.all_rays = []
             self.all_rgbs = []
-            
-            with open(os.path.join(self.root_dir,'pv_pose.json')) as f:
-                j_pv = json.load(f)
             
             for i, image_path in enumerate(self.image_paths[:self.image_limit]):
                 timestamp = image_path.split('.')[0]
@@ -61,7 +60,7 @@ class HololensSimpleDataset(Dataset):
                 
                 image = self.transform(image) # (3,h,w)
                 image = image.view(3,-1).permute(1,0) #(h*w,3)
-                self.all_rgbs += [image]
+                
                 
                 rays_o, rays_d = get_rays(self.directions, c2w)
                 #for non spheric_poses use ndc rays
@@ -71,12 +70,15 @@ class HololensSimpleDataset(Dataset):
                 else:
                     raise NotImplementedError
                 
+                self.all_rgbs += [image]
                 self.all_rays += [torch.cat([rays_o,rays_d, near*torch.ones_like(rays_o[:,:1]), far*torch.ones_like(rays_o[:,:1])], 1)] #(h*w,8)
                 
             self.all_rays = torch.cat(self.all_rays,0) #((N_images)*h*2,8)
             self.all_rgbs = torch.cat(self.all_rgbs,0) #((N_images)*h*2,3)
             
         elif self.split == 'test':
+            self.all_rgbs = []
+            self.all_rays = []
             for i, image_path in enumerate(self.image_paths[:self.image_limit]):
                 timestamp = image_path.split('.')[0]
                 image_path = os.path.join(self.root_dir,'pv',image_path)
@@ -86,14 +88,17 @@ class HololensSimpleDataset(Dataset):
                 image = self.transform(image) # (3,h,w)
                 image = image.view(3,-1).permute(1,0) # (h*w,3)
                 
-                self.all_rgbs = []
-                self.all_rays = []
+                
+                rays_o, rays_d = get_rays(self.directions, c2w)
+                #for non spheric_poses use ndc rays
+                if not self.spheric_poses:
+                    near,far = 0,1
+                    rays_o, rays_d = get_ndc_rays(H,W,self.focal, 1.0, rays_o, rays_d)
+                else:
+                    raise NotImplementedError
                 
                 self.all_rgbs.append(image)
                 self.all_rays.append(torch.cat([rays_o,rays_d, near*torch.ones_like(rays_o[:,:1]), far*torch.ones_like(rays_o[:,:1])], 1))
-                
-            self.all_rays = torch.cat(self.all_rays,0)
-            self.all_rgbs = torch.cat(self.all_rgbs,0)
     
     '''
         Required functions to define to inherit from Dataset.
@@ -101,6 +106,8 @@ class HololensSimpleDataset(Dataset):
     '''
     def __len__(self):
         if self.split == 'train':
+            return len(self.all_rays)
+        elif self.split == 'test':
             return len(self.all_rays)
         return 21
     
