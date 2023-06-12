@@ -42,7 +42,7 @@ class HololensSimpleDataset(Dataset):
     def setup_data(self, near, far):
         self.image_paths = sorted(os.listdir(os.path.join(self.root_dir,'pv')))
         
-        H,W = self.img_wh
+        W,H = self.img_wh
         
         self.directions = get_ray_directions(H,W,self.focal)
         
@@ -69,13 +69,31 @@ class HololensSimpleDataset(Dataset):
                     near,far = 0,1
                     rays_o, rays_d = get_ndc_rays(H,W,self.focal, 1.0, rays_o, rays_d)
                 else:
-                    pass
-                    #near,far set by args
+                    raise NotImplementedError
                 
-            self.all_rays += [torch.cat([rays_o,rays_d, near*torch.ones_like(rays_o[:,:1]), far*torch.ones_like(rays_o[:,:1])], 1)] #(h*w,8)
+                self.all_rays += [torch.cat([rays_o,rays_d, near*torch.ones_like(rays_o[:,:1]), far*torch.ones_like(rays_o[:,:1])], 1)] #(h*w,8)
+                
             self.all_rays = torch.cat(self.all_rays,0) #((N_images)*h*2,8)
             self.all_rgbs = torch.cat(self.all_rgbs,0) #((N_images)*h*2,3)
+            
+        elif self.split == 'test':
+            for i, image_path in enumerate(self.image_paths[:self.image_limit]):
+                timestamp = image_path.split('.')[0]
+                image_path = os.path.join(self.root_dir,'pv',image_path)
+                image = cv2.cvtColor(cv2.imread(image_path),cv2.COLOR_BGR2RGB) #(h,w,3)
+                c2w = torch.FloatTensor(np.array(j_pv[timestamp]).T)[:3,:] #3x4 matrix for pose
                 
+                image = self.transform(image) # (3,h,w)
+                image = image.view(3,-1).permute(1,0) # (h*w,3)
+                
+                self.all_rgbs = []
+                self.all_rays = []
+                
+                self.all_rgbs.append(image)
+                self.all_rays.append(torch.cat([rays_o,rays_d, near*torch.ones_like(rays_o[:,:1]), far*torch.ones_like(rays_o[:,:1])], 1))
+                
+            self.all_rays = torch.cat(self.all_rays,0)
+            self.all_rgbs = torch.cat(self.all_rgbs,0)
     
     '''
         Required functions to define to inherit from Dataset.
@@ -91,6 +109,8 @@ class HololensSimpleDataset(Dataset):
         if self.split == 'train': # use data in the buffers
             sample = {'rays': self.all_rays[idx],
                       'rgbs': self.all_rgbs[idx]}
+        elif self.split == 'test':
+            sample = {'rays': self.all_rays[idx], 'rgbs': self.all_rgbs[idx]}
         return sample
     
     
