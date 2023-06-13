@@ -19,13 +19,13 @@ from ray_utils import *
         
 '''
 class HololensSimpleDataset(Dataset):
-    def __init__(self, root_dir, focal, split='train', spheric_poses=False, img_wh=(1280,720), bounds=(2,6), image_limit=50):
+    def __init__(self, root_dir, focal, split='train', spheric_poses=False, img_wh=(1280,720), bounds=(2,6), image_limit=50, skips=1):
         '''
             Despite it being just an __init__. we need to parse the dataset here in order to call __len__ and __getitem__
         '''
         self.focal = focal
         self.root_dir = root_dir
-        
+        self.skips = skips
         self.img_wh = img_wh
         
         self.split = split
@@ -52,7 +52,7 @@ class HololensSimpleDataset(Dataset):
             self.all_rays = []
             self.all_rgbs = []
             
-            for i, image_path in enumerate(self.image_paths[:self.image_limit]):
+            for i, image_path in enumerate(self.image_paths[:self.image_limit:self.skips]):
                 timestamp = image_path.split('.')[0]
                 image_path = os.path.join(self.root_dir,'pv',image_path)
                 image = cv2.cvtColor(cv2.imread(image_path),cv2.COLOR_BGR2RGB) #(h,w,3)

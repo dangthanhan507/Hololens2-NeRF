@@ -64,11 +64,11 @@ if __name__ == '__main__':
 
     #load NERF
     with open('./models/finished1.pt', 'rb') as f:
-        params = torch.load('./models/finished1.pt', 'cuda')
+        params = torch.load('./models/finished4.pt', 'cuda')
     nerf_coarse.load_state_dict(params['NeRF Coarse Params'])
     nerf_fine.load_state_dict(params['NeRF Fine Params'])
     
-    sample = dataset[0]
+    sample = dataset[5]
     rays = sample['rays'].cuda()
     # rays = rays.reshape(rays.shape).cuda()
     

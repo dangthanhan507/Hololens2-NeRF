@@ -9,7 +9,7 @@ if __name__ == '__main__':
     else:
       root = './'
     
-    error_path = os.path.join('./','model_error',f'error{num}.txt')
+    error_path = os.path.join('./','model_error',f'error{5}.txt')
     
     errors = []
     with open(error_path,'r') as f:

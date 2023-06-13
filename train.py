@@ -28,11 +28,20 @@ from tqdm import tqdm
     NOTE: remember to get calibrations to plug in real focal length
 
 '''
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-m", "--model", type=str, default="")
+args = parser.parse_args()
+
 
 if __name__ == '__main__':
+    model_folder = 'models'
+    dataset_folder = 'datanerf/'
+    
     google_colab = False
 
-    BATCH_SIZE = 4_000
+    BATCH_SIZE = 1_500
     EPOCHS = 10
     
     print('Setting up network')
@@ -42,21 +51,29 @@ if __name__ == '__main__':
     nerf_coarse = NeRF().cuda()
     nerf_fine = NeRF().cuda()
     print('Done setting up Network\n')
-    
-    print('Loading Dataset')
+
     if google_colab:
       root = '/content/drive/MyDrive/nerf_desktop/Hololens2-NeRF/'
     else:
       root = './'
+    os.makedirs(os.path.join(root,model_folder),exist_ok=True)
+    os.makedirs(os.path.join(root,f'{model_folder}_error'),exist_ok=True)
 
-    items = os.listdir(os.path.join(root,'models/'))
+    if args.model != "":
+      print('\tLoaded parameters')
+      params = torch.load(os.path.join(root,model_folder,args.model), 'cuda')
+      nerf_coarse.load_state_dict(params['NeRF Coarse Params'])
+      nerf_fine.load_state_dict(params['NeRF Fine Params'])
     
-    path = os.path.join(root,'datanerf/')
-    error_path = os.path.join(root,'model_error',f'error{len(items)}.txt')
+    print('Loading Dataset')
+    items = os.listdir(os.path.join(root,model_folder))
+    
+    path = os.path.join(root,dataset_folder)
+    error_path = os.path.join(root,f'{model_folder}_error',f'error{len(items)}.txt')
     
     file_error = open(error_path,'w')
     
-    dataset = HololensSimpleDataset(path,3, img_wh=(424,240))
+    dataset = HololensSimpleDataset(path,3, img_wh=(424,240),image_limit=50,skips=2)
     
     dataloader = DataLoader(dataset,shuffle=True,num_workers=4,batch_size=BATCH_SIZE, pin_memory=True)
     print('Done Loading Dataset\n')
@@ -64,6 +81,7 @@ if __name__ == '__main__':
     
     print('Loading Optimizer/Loss')
     adam = torch.optim.Adam([ {'params': nerf_coarse.parameters()}, {'params': nerf_fine.parameters()}], lr=1e-3)
+    scheduler=torch.optim.lr_scheduler.MultiStepLR(adam, [10,10,10], gamma=0.5)
     loss = nn.MSELoss(reduction='mean')
     print('Done Loading Optimizer/Loss\n')
     
@@ -85,7 +103,7 @@ if __name__ == '__main__':
             B = rays.shape[0]
             
             #runs NeRF all the way
-            rendered_rays = render_rays(models, embeddings, rays,N_importance=64,chunk=B,white_back=False) #simple rendering (more hparams)
+            rendered_rays = render_rays(models, embeddings, rays,N_samples=64,N_importance=64,chunk=B,white_back=False) #simple rendering (more hparams)
             
             for k,v in rendered_rays.items():
                 results[k] = torch.cat([v],0)
@@ -98,11 +116,11 @@ if __name__ == '__main__':
             
             mse.backward()
             adam.step()
+        scheduler.step()
         print(f'Training error: {epoch_error}')
         file_error.write(f'{epoch_error}\n')
         
     file_error.close()
-    os.makedirs(os.path.join(root,'models/'),exist_ok=True)
     chkpt = {'NeRF Coarse Params': nerf_coarse.state_dict(), 'NeRF Fine Params': nerf_fine.state_dict()}
     
-    torch.save(chkpt, os.path.join(root,'models/',f'finished{len(items)}.pt'))
+    torch.save(chkpt, os.path.join(root,model_folder,f'finished{len(items)}.pt'))
